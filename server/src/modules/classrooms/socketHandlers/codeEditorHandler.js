@@ -50,6 +50,10 @@ export const checkCodeExecutionRateLimit = (socket, roomId, now = Date.now()) =>
   const currentAttempt = executionAttempts.get(key);
 
   if (!currentAttempt || now >= currentAttempt.resetAt) {
+    // Clean up expired entries to prevent unbounded memory growth
+    for (const [k, v] of executionAttempts.entries()) {
+      if (now >= v.resetAt) executionAttempts.delete(k);
+    }
     executionAttempts.set(key, { count: 1, resetAt: now + windowMs });
     return { allowed: true };
   }
