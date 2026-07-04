@@ -2,7 +2,8 @@ import Resume from "../../database/models/Resume.js";
 import User from "../../database/models/User.js";
 import LearningProgress from "../../database/models/LearningProgress.js";
 import InterviewSession from "../../database/models/InterviewSession.js";
-
+import JobPosting from "../../database/models/JobPosting.js";
+import JobApplication from "../../database/models/JobApplication.js";
 import logger from "../../utils/logger.js";
 import AppError from "../../utils/AppError.js";
 
@@ -148,10 +149,20 @@ export const getDashboardAnalytics = async (req, res, next) => {
 
     if (role === "recruiter") {
       // Recruiter: Talent pool density map
-      const highlySkilled = await InterviewSession.aggregate([
-        { $match: { status: "completed", overallScore: { $gte: 80 } } },
-        { $group: { _id: "$topic", count: { $sum: 1 } } }
-      ]);
+      const recruiterJobIds = await JobPosting.find({ recruiter: req.user._id })
+  .select("_id").lean();
+const jobIds = recruiterJobIds.map(j => j._id);
+const applicantIds = await JobApplication.distinct("applicant",
+  { job: { $in: jobIds } });
+
+const highlySkilled = await InterviewSession.aggregate([
+  { $match: { 
+    status: "completed", 
+    overallScore: { $gte: 80 },
+    userId: { $in: applicantIds }
+  }},
+  { $group: { _id: "$topic", count: { $sum: 1 } } }
+]);
       
       const densityMap = highlySkilled.map(t => ({ topic: t._id, skilledCandidates: t.count }));
       
