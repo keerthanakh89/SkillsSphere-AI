@@ -27,6 +27,7 @@ import {
   startInterview,
   submitAnswer,
   submitTutorFeedback,
+  getLearningPlan,
 } from "./controller.js";
 
 const router = express.Router();
@@ -434,5 +435,25 @@ router.patch("/:id/questions/:questionId/bookmark", validateBody(bookmarkQuestio
  *         description: Session results retrieved
  */
 router.get("/:id/results", getSessionResults);
+
+/**
+ * @openapi
+ * /api/interviews/{id}/recommend-learning:
+ *   get:
+ *     summary: Get personalized learning plan based on weak concepts
+ *     tags: [Interviews]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Learning plan retrieved
+ */
+router.get("/:id/recommend-learning", getLearningPlan);
 
 export default router;

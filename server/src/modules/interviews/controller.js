@@ -26,31 +26,56 @@ import { safeDeletePhysicalFile } from "../../utils/fileUtils.js";
 export const startInterview = asyncHandler(async (req, res) => {
   const { topic, difficulty, persona } = req.body;
 
-  const session = await createSession({
-    userId: req.user._id,
-    topic,
-    difficulty: difficulty || "medium",
-    persona: persona || "friendly",
-  });
+  try {
+    const session = await createSession({
+      userId: req.user._id,
+      topic,
+      difficulty: difficulty || "medium",
+      persona: persona || "friendly",
+    });
 
-  res.status(201).json({
-    success: true,
-    message: "Interview session started",
-    data: {
-      sessionId: session._id,
-      topic: session.topic,
-      difficulty: session.difficulty,
-      totalQuestions: session.totalQuestions,
-      currentQuestion: session.answers[0]
-        ? {
-            index: 0,
-            questionText: session.answers[0].questionText,
-            questionId: session.answers[0].questionId,
-            bookmarked: Boolean(session.answers[0].bookmarked),
-          }
-        : null,
-    },
-  });
+    res.status(201).json({
+      success: true,
+      message: "Interview session started",
+      data: {
+        sessionId: session._id,
+        topic: session.topic,
+        difficulty: session.difficulty,
+        totalQuestions: session.totalQuestions,
+        currentQuestion: session.answers[0]
+          ? {
+              index: 0,
+              questionText: session.answers[0].questionText,
+              questionId: session.answers[0].questionId,
+              bookmarked: Boolean(session.answers[0].bookmarked),
+            }
+          : null,
+      },
+    });
+  } catch (err) {
+    if (err.name === "AITimeoutError" && err.session) {
+      return res.status(206).json({
+        success: true,
+        message: "High traffic: generating fallback questions...",
+        isFallback: true,
+        data: {
+          sessionId: err.session._id,
+          topic: err.session.topic,
+          difficulty: err.session.difficulty,
+          totalQuestions: err.session.totalQuestions,
+          currentQuestion: err.session.answers[0]
+            ? {
+                index: 0,
+                questionText: err.session.answers[0].questionText,
+                questionId: err.session.answers[0].questionId,
+                bookmarked: Boolean(err.session.answers[0].bookmarked),
+              }
+            : null,
+        },
+      });
+    }
+    throw err;
+  }
 });
 
 /**
@@ -129,7 +154,11 @@ export const getInterviewHistory = asyncHandler(async (req, res) => {
 
   res.status(200).json({
     success: true,
-    data: history,
+    data: history.sessions || history,
+    analytics: history.analytics || {},
+    totalDocuments: history.pagination?.total || 0,
+    totalPages: history.pagination?.pages || 1,
+    currentPage: history.pagination?.page || page,
   });
 });
 
@@ -292,4 +321,65 @@ export const deleteInterviewSession = asyncHandler(async (req, res) => {
     success: true,
     message: "Interview session deleted successfully",
   });
+});
+
+/**
+ * @desc    Get personalized learning recommendations based on session weak concepts
+ * @route   GET /api/interviews/:id/recommend-learning
+ * @access  Private (session owner only)
+ */
+export const getLearningPlan = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const session = await InterviewSession.findOne({ _id: id, userId: req.user._id });
+
+  if (!session) {
+    throw new AppError("Interview session not found", 404);
+  }
+
+  if (session.status !== "completed") {
+    throw new AppError("Cannot generate learning plan for incomplete session", 400);
+  }
+
+  let weakConcepts = session.weakConcepts;
+  
+  if (!weakConcepts || weakConcepts.length === 0) {
+    const allMissed = [
+      ...(session.answers || []).flatMap((a) => a.concepts?.missed || []),
+      ...(session.answers || []).flatMap((a) => a.weakConcepts || [])
+    ];
+    const missedCounts = {};
+    allMissed.forEach((c) => {
+      missedCounts[c] = (missedCounts[c] || 0) + 1;
+    });
+    weakConcepts = Object.entries(missedCounts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([concept]) => concept);
+  }
+
+  if (weakConcepts.length === 0) {
+    return res.status(200).json({
+      status: "success",
+      data: { plan: [] }
+    });
+  }
+
+  try {
+    const { getLearningRecommendations } = await import("../../integrations/aiInterviewService.js");
+    const recommendations = await getLearningRecommendations(weakConcepts.slice(0, 5), session.topic);
+
+    res.status(200).json({
+      status: "success",
+      data: recommendations
+    });
+  } catch (err) {
+    if (err.name === "AITimeoutError") {
+      return res.status(206).json({
+        status: "partial_content",
+        message: "High traffic: generating fallback learning plan...",
+        isFallback: true,
+        data: err.fallbackData
+      });
+    }
+    throw err;
+  }
 });

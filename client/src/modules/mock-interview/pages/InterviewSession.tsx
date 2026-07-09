@@ -1,6 +1,6 @@
 
-import React, { useRef, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import React, { useRef, useEffect, useState } from "react";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useDocumentTitle } from "../../../hooks/useDocumentTitle";
 
@@ -48,8 +48,17 @@ const InterviewSession = () => {
   useDocumentTitle("Interview Session");
   const { id: sessionId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [showFallbackToast, setShowFallbackToast] = useState(!!location.state?.isFallback);
   const textareaRef = useRef(null);
   const { user } = useSelector((state: any) => state.auth);
+
+  useEffect(() => {
+    if (showFallbackToast) {
+      const timer = setTimeout(() => setShowFallbackToast(false), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [showFallbackToast]);
 
   // 1. Manage State, Timers, Persistence, and API operations
   const state = useInterviewState(sessionId, false);
@@ -178,6 +187,16 @@ const InterviewSession = () => {
   return (
     <div className="min-h-screen bg-gray-50/50 dark:bg-[#09090b] text-gray-900 dark:text-text-main font-sans pt-20 flex flex-col overflow-hidden relative">
       <Navbar />
+
+      {/* Fallback Toast Notification */}
+      {showFallbackToast && (
+        <div className="fixed top-24 left-1/2 transform -translate-x-1/2 z-50 animate-[fadeInDown_0.5s_ease-out]">
+          <div className="bg-amber-100 dark:bg-amber-900/80 border-l-4 border-amber-500 text-amber-900 dark:text-amber-100 p-4 rounded shadow-lg flex items-center gap-3">
+            <AlertCircle size={20} className="text-amber-500" />
+            <span className="font-semibold text-sm">High traffic, generating fallback questions...</span>
+          </div>
+        </div>
+      )}
 
       {/* Background glowing elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">

@@ -9,7 +9,7 @@ export const fetchInterviewHistory = createAsyncThunk(
     try {
       const res = await getHistory(page, limit);
       if (!res.success) throw new Error(res.error || 'Failed to fetch interview history');
-      return res.data; // should contain { sessions, analytics, pagination }
+      return res;
     } catch (error: any) {
       return rejectWithValue(error.message || 'Failed to load interview history.');
     }
@@ -40,9 +40,13 @@ const interviewsSlice = createSlice({
       })
       .addCase(fetchInterviewHistory.fulfilled, (state, action) => {
         state.isLoading = false;
-        state.sessions = action.payload?.sessions || [];
+        state.sessions = action.payload?.data || [];
         state.analytics = action.payload?.analytics || null;
-        state.pagination = action.payload?.pagination || { page: 1, pages: 1, total: 0 };
+        state.pagination = { 
+          page: action.payload?.currentPage || 1, 
+          pages: action.payload?.totalPages || 1, 
+          total: action.payload?.totalDocuments || 0 
+        };
       })
       .addCase(fetchInterviewHistory.rejected, (state, action) => {
         state.isLoading = false;

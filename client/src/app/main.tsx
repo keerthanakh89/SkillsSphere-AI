@@ -30,7 +30,7 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     <Provider store={store}>
       <ThemeProvider>
-        {/* @ts-ignore */}
+        {/* @ts-expect-error TODO: Fix pervasive types */}
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <TopLoadingBar />
           <ToastProvider>

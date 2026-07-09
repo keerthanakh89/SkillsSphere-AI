@@ -584,7 +584,7 @@ const RecruiterAnalyticsPage = () => {
                   <div className="p-6 h-[280px] flex items-center justify-center">
                     {statusPieData.length > 0 ? (
                       <div className="flex flex-col sm:flex-row items-center gap-6 w-full">
-                        <ResponsiveContainer width="100%" height={220}>
+                        <ResponsiveContainer width="100%" height={220} minWidth={0} minHeight={0}>
                           <PieChart>
                             <Pie
                               data={statusPieData}
@@ -639,7 +639,7 @@ const RecruiterAnalyticsPage = () => {
                   </div>
                   <div className="p-6 h-[280px]">
                     {timelineBarData.length > 0 ? (
-                      <ResponsiveContainer width="100%" height="100%">
+                      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                         <BarChart data={timelineBarData}>
                           <defs>
                             <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
@@ -814,7 +814,7 @@ const RecruiterAnalyticsPage = () => {
                   <div className="p-6 h-[300px] flex items-center justify-center">
                     {matchCategoryPieData.length > 0 ? (
                       <div className="flex flex-col sm:flex-row items-center gap-6 w-full">
-                        <ResponsiveContainer width="100%" height={240}>
+                        <ResponsiveContainer width="100%" height={240} minWidth={0} minHeight={0}>
                           <PieChart>
                             <Pie
                               data={matchCategoryPieData}
@@ -899,7 +899,7 @@ const RecruiterAnalyticsPage = () => {
                     <Code size={18} className="text-blue-400" /> Specialization Demographics
                   </h3>
                   <div className="h-[280px]">
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                       <BarChart data={specializationData} layout="vertical">
                         <defs>
                           <linearGradient id="specGradient" x1="0" y1="0" x2="1" y2="0">

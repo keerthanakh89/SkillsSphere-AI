@@ -208,7 +208,7 @@ const TutorAnalyticsDashboard = () => {
               <div className="bg-white dark:bg-[#121214] p-6 sm:p-8 rounded-3xl shadow-sm border border-gray-100 dark:border-white/5">
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6">Skill Distribution Heatmap</h3>
                 <div className="h-[400px]">
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                     <Treemap
                       data={data}
                       dataKey="count"
@@ -224,7 +224,7 @@ const TutorAnalyticsDashboard = () => {
               <div className="bg-white dark:bg-[#121214] p-6 sm:p-8 rounded-3xl shadow-sm border border-gray-100 dark:border-white/5">
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6">Critical Skill Gaps (Severity)</h3>
                 <div className="h-[400px]">
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                     <BarChart data={data.slice(0, 10)} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                       <XAxis type="number" />
                       <YAxis dataKey="name" type="category" width={100} />

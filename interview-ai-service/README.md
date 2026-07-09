@@ -12,6 +12,18 @@ Python AI microservice for the SkillsSphere AI Interview Engine. Handles speech-
 
 ## Setup
 
+### Knowledge Base Setup (RAG)
+
+To seed the local Qdrant vector database with RAG content:
+
+1. **Folder Structure**: Create a `knowledge/` directory in the `interview-ai-service` root folder. Inside `knowledge/`, create subdirectories for each topic (e.g., `knowledge/react/`, `knowledge/node/`).
+2. **File Format**: Place Markdown (`.md`) files containing learning material or documentation into their respective topic folders.
+3. **Chunking Rules**: The ingestion script (`rag/ingestion.py`) will automatically parse these Markdown files, chunk them based on headers and paragraphs, and attach the topic folder name as metadata to ensure topic-specific isolation during retrieval.
+4. **Ingestion**: Once the Qdrant container is running, execute `python rag/ingestion.py` from the `interview-ai-service` directory to generate embeddings using the BAAI/bge-small-en-v1.5 model and store the chunks in Qdrant.
+
+### API Setup
+
+
 ```bash
 # Navigate to the service directory
 cd interview-ai-service

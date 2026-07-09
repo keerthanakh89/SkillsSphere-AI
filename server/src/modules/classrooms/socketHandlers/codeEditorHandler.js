@@ -10,7 +10,7 @@ const DEFAULT_EXECUTION_RATE_LIMIT_WINDOW_MS = 60_000;
 const executionAttempts = new Map();
 
 // Periodic cleanup of expired rate limit entries to prevent memory leaks
-setInterval(() => {
+const cleanupTimer = setInterval(() => {
   const now = Date.now();
   for (const [key, attempt] of executionAttempts.entries()) {
     if (now >= attempt.resetAt) {
@@ -18,6 +18,10 @@ setInterval(() => {
     }
   }
 }, 5 * 60 * 1000); // Run every 5 minutes
+
+if (cleanupTimer.unref) {
+  cleanupTimer.unref();
+}
 
 const getRateLimitConfig = () => {
   const maxAttempts = Number(process.env.CODE_EXECUTION_RATE_LIMIT_MAX);

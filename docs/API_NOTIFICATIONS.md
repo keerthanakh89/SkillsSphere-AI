@@ -24,7 +24,7 @@ Welcome to the comprehensive documentation for the SkillsSphere-AI Notifications
     - [DELETE /api/notifications](#delete-all-notifications)
 6. [WebSocket Integration](#websocket-integration)
     - [Connection Lifecycle](#connection-lifecycle)
-    - [Real-time Events](#real-time-events)
+
 7. [Pagination, Filtering, and Sorting](#pagination-filtering-and-sorting)
 8. [Error Handling & Status Codes](#error-handling--status-codes)
 9. [Integration Examples (cURL, Node.js, Python)](#integration-examples)
@@ -113,6 +113,7 @@ Used primarily by the frontend to navigate the user when clicking a notification
 Every endpoint under `/api/notifications` requires a valid JWT. The route is protected by the `protect` middleware.
 
 **Header Format:**
+
 ```http
 Authorization: Bearer <token_string>
 ```
@@ -125,11 +126,13 @@ Users are strictly isolated to their own records.
 
 ### 3. WebSocket Authentication
 Real-time connections use the Socket.IO `auth` handshake.
+
 ```javascript
 const socket = io("wss://api.example.com", {
   auth: { token: "eyJhbG..." }
 });
 ```
+
 The server validates the JWT and attaches `socket.user`. The client then explicitly joins their private room by emitting `join-notifications`.
 
 ---
@@ -159,6 +162,7 @@ Retrieves a paginated list of notifications for the authenticated user.
 - `type` (string, optional): Filter by an exact type enum or by groups (e.g., `jobs`, `interviews`, `system`).
 
 **Example Response:**
+
 ```json
 {
   "success": true,
@@ -190,6 +194,7 @@ Returns a lightweight integer representing the user's unread notifications badge
 **Endpoint:** `GET /api/notifications/unread-count`
 
 **Example Response:**
+
 ```json
 {
   "success": true,
@@ -206,6 +211,7 @@ Creates a new notification. This automatically broadcasts the event to the user'
 **Endpoint:** `POST /api/notifications`
 
 **Payload:**
+
 ```json
 {
   "userId": "665b65d6...",
@@ -254,6 +260,7 @@ Bulk deletes a specific subset of notifications via an array of IDs.
 **Endpoint:** `DELETE /api/notifications/bulk`
 
 **Payload:**
+
 ```json
 {
   "ids": ["665b673d...", "665c891a..."]
@@ -313,6 +320,7 @@ The API uses structured, predictable error responses, enforced globally by `AppE
 
 ### 400 Bad Request
 Triggered by Zod validation failures or malformed Object IDs.
+
 ```json
 {
   "success": false,
@@ -338,6 +346,7 @@ Triggered if the requested notification ID does not exist in the database.
 ## Integration Examples
 
 ### Node.js (Fetch API)
+
 ```javascript
 async function fetchUnreadNotifications(token) {
   const response = await fetch("https://api.example.com/api/notifications?isRead=false&limit=5", {
@@ -351,6 +360,7 @@ async function fetchUnreadNotifications(token) {
 ```
 
 ### Python (Requests)
+
 ```python
 import requests
 

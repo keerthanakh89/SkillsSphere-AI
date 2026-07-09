@@ -14,7 +14,7 @@ vi.mock("react-redux", () => ({
 }));
 
 const setReduxState = (state) => {
-  reactRedux.useSelector.mockReturnValue({
+  (reactRedux.useSelector as any).mockReturnValue({
     sessions: [],
     pagination: { page: 1, pages: 1, total: 0 },
     analytics: null,
@@ -105,7 +105,7 @@ describe("InterviewHistory export", () => {
     });
     // @ts-expect-error TODO: Fix pervasive types
     getHistory.mockResolvedValueOnce({
-      data: { sessions: [], pagination: { page: 1, pages: 1, total: 0 } },
+      data: [], totalDocuments: 0, totalPages: 1, currentPage: 1, analytics: null
     });
 
     renderHistory();
@@ -119,7 +119,7 @@ describe("InterviewHistory export", () => {
     });
     // @ts-expect-error TODO: Fix pervasive types
     getHistory.mockResolvedValueOnce({
-      data: { sessions: mockSessions, pagination: { page: 1, pages: 1, total: 1 } },
+      data: mockSessions, totalDocuments: 1, totalPages: 1, currentPage: 1, analytics: null
     });
 
     renderHistory();
@@ -134,7 +134,7 @@ describe("InterviewHistory export", () => {
     });
     // @ts-expect-error TODO: Fix pervasive types
     getHistory.mockResolvedValueOnce({
-      data: { sessions: mockSessions, pagination: { page: 1, pages: 1, total: 1 } },
+      data: mockSessions, totalDocuments: 1, totalPages: 1, currentPage: 1, analytics: null
     });
 
     renderHistory();
@@ -161,7 +161,7 @@ describe("InterviewHistory export", () => {
     });
     // @ts-expect-error TODO: Fix pervasive types
     getHistory.mockResolvedValueOnce({
-      data: { sessions: mockSessions, pagination: { page: 1, pages: 1, total: 1 } },
+      data: mockSessions, totalDocuments: 1, totalPages: 1, currentPage: 1, analytics: null
     });
 
     renderHistory();
@@ -196,10 +196,9 @@ describe("InterviewHistory export", () => {
     setReduxState({
       sessions: mockSessions, pagination: { page: 1, pages: 2, total: 2 }
     });
-    getHistory
-      // @ts-expect-error TODO: Fix pervasive types
+    (getHistory as any)
       .mockResolvedValueOnce({
-        data: { sessions: mockSessions, pagination: { page: 1, pages: 2, total: 2 } },
+        data: mockSessions, totalDocuments: 2, totalPages: 2, currentPage: 1, analytics: null
       })
       .mockReturnValueOnce(pendingExport);
 
@@ -216,10 +215,10 @@ describe("InterviewHistory export", () => {
       expect(jsonButton).toBeDisabled();
       expect(csvButton).toHaveTextContent("Exporting...");
     });
-    expect(getHistory).toHaveBeenCalledTimes(1);
+    expect(getHistory).toHaveBeenCalledTimes(2);
 
     resolveExport({
-      data: { sessions: mockSessions, pagination: { page: 1, pages: 1, total: 1 } },
+      data: mockSessions, totalDocuments: 1, totalPages: 1, currentPage: 1, analytics: null
     });
 
     await waitFor(() => expect(csvButton).not.toBeDisabled());
@@ -231,7 +230,7 @@ describe("InterviewHistory export", () => {
     });
     // @ts-expect-error TODO: Fix pervasive types
     getHistory.mockResolvedValueOnce({
-      data: { sessions: mockSessions, pagination: { page: 1, pages: 1, total: 1 } },
+      data: mockSessions, totalDocuments: 1, totalPages: 1, currentPage: 1, analytics: null
     });
     // @ts-expect-error TODO: Fix pervasive types
     URL.createObjectURL.mockImplementationOnce(() => {
@@ -303,7 +302,7 @@ describe("InterviewHistory filtering", () => {
     });
     // @ts-expect-error TODO: Fix pervasive types
     getHistory.mockResolvedValue({
-      data: { sessions: filterSessions, pagination: { page: 1, pages: 1, total: 3 } },
+      data: filterSessions, totalDocuments: 3, totalPages: 1, currentPage: 1, analytics: null
     });
   });
 

@@ -23,7 +23,7 @@ export interface NotificationsState {
   items: AppNotification[];
   unreadCount: number;
   loading: boolean;
-  socketStatus: "idle" | "connected" | "disconnected" | "error";
+  socketStatus: "idle" | "connected" | "disconnected" | "error" | "reconnecting";
   pagination: PaginationData;
   error: string | null;
   
@@ -38,6 +38,7 @@ export interface NotificationsState {
   _rollbackBulkDeletedItems?: AppNotification[] | null;
 }
 
+// Ensure no stray characters here
 // Helper to convert async errors to readable messages
 const toErrorMessage = (error: unknown, fallback: string) =>
   (error as Error)?.message || fallback || "An unexpected error occurred.";
