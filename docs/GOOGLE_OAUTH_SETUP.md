@@ -35,7 +35,7 @@ Now, generate the actual Client ID and Client Secret.
 2. Click **+ CREATE CREDENTIALS** at the top of the screen and select **OAuth client ID**.
 3. Under **Application type**, select **Web application**.
 4. Name the client (e.g., "SkillsSphere Web Client").
-5. Under **Authorized JavaScript origins**, click **+ ADD URI**. 
+5. Under **Authorized JavaScript origins**, click **+ ADD URI**.
    - Add your frontend URL. For local development, this is:
      `http://localhost:5173`
 6. Under **Authorized redirect URIs**, click **+ ADD URI**.

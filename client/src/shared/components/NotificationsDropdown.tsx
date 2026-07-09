@@ -38,7 +38,6 @@ const NotificationsDropdown = ({ isOpen, onClose }) => {
   // Fetch first page on mount or when opened
   useEffect(() => {
     if (isOpen) {
-      // @ts-expect-error TODO: Fix pervasive types
       dispatch(getNotifications({ page: 1, limit: 10 }));
     }
   }, [isOpen, dispatch]);
@@ -57,7 +56,6 @@ const NotificationsDropdown = ({ isOpen, onClose }) => {
     if (pagination.page < pagination.pages && !loadMoreLoading) {
       setLoadMoreLoading(true);
       await dispatch(
-        // @ts-expect-error TODO: Fix pervasive types
         getNotifications({ page: pagination.page + 1, limit: 10 })
       );
       setLoadMoreLoading(false);

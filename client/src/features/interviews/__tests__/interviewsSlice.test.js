@@ -31,9 +31,11 @@ describe('interviewsSlice Reducer', () => {
 
   it('should handle fetchInterviewHistory.fulfilled', () => {
     const payload = {
-      sessions: [{ id: 1, role: 'Frontend' }],
+      data: [{ id: 1, role: 'Frontend' }],
       analytics: { totalScore: 85 },
-      pagination: { page: 1, pages: 2, total: 15 }
+      currentPage: 1,
+      totalPages: 2,
+      totalDocuments: 15
     };
     
     const nextState = interviewsReducer(initialState, {
@@ -42,9 +44,13 @@ describe('interviewsSlice Reducer', () => {
     });
     
     expect(nextState.isLoading).toBe(false);
-    expect(nextState.sessions).toEqual(payload.sessions);
+    expect(nextState.sessions).toEqual(payload.data);
     expect(nextState.analytics).toEqual(payload.analytics);
-    expect(nextState.pagination).toEqual(payload.pagination);
+    expect(nextState.pagination).toEqual({
+      page: payload.currentPage,
+      pages: payload.totalPages,
+      total: payload.totalDocuments
+    });
   });
 
   it('should handle fetchInterviewHistory.rejected', () => {

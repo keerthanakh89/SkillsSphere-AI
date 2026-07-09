@@ -60,12 +60,22 @@ export const getResults = async (sessionId) => {
   });
 };
 
+export interface InterviewHistoryResponse {
+  success?: boolean;
+  error?: string;
+  data: any[];
+  analytics: any;
+  totalDocuments: number;
+  totalPages: number;
+  currentPage: number;
+}
+
 /**
  * Get paginated interview history for the current user.
  * @param {number} page - Page number (default: 1).
  * @param {number} limit - Results per page (default: 10).
  */
-export const getHistory = async (page = 1, limit = 10) => {
+export const getHistory = async (page = 1, limit = 10): Promise<InterviewHistoryResponse> => {
   return apiRequest(`/api/interviews/history?page=${page}&limit=${limit}`, {
     method: "GET",
     token: getToken(),
@@ -82,6 +92,20 @@ export const toggleQuestionBookmark = async (sessionId, questionId, bookmarked) 
 
 export const getBookmarkedQuestions = async () => {
   return apiRequest("/api/interviews/bookmarks", {
+    method: "GET",
+    token: getToken(),
+  });
+};
+
+export const getLearningPlan = async (sessionId: string) => {
+  return apiRequest(`/api/interviews/${sessionId}/recommend-learning`, {
+    method: "GET",
+    token: getToken(),
+  });
+};
+
+export const getInterviewAnalytics = async () => {
+  return apiRequest("/api/analytics/interview-dashboard", {
     method: "GET",
     token: getToken(),
   });

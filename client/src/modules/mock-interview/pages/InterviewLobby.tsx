@@ -60,7 +60,7 @@ const InterviewLobby = () => {
       const res = await startSession(topic, difficulty, selectedPersona);
       const sessionId = res.data?.sessionId;
       if (sessionId) {
-        navigate(`/mock-interview/${sessionId}`, { replace: true });
+        navigate(`/mock-interview/${sessionId}`, { replace: true, state: { isFallback: res.isFallback } });
       }
     } catch (err: any) {
       setError(err.message || "Failed to start interview. Please try again.");

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { getResults, toggleQuestionBookmark } from "../services/interviewService";
+import { getResults, toggleQuestionBookmark, getLearningPlan } from "../services/interviewService";
 import InterviewResultsSkeleton from "../components/InterviewResultsSkeleton";
 import { analyzeText } from "../utils/sentiment";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import Navbar from "../../../shared/components/Navbar";
 import Footer from "../../../shared/components/Footer";
-import { exportToPDF } from "../../../utils/exportUtils";
+import { generatePDFReport } from "../utils/pdfGenerator";
 
 import { useDocumentTitle } from "../../../hooks/useDocumentTitle";
 import logger from "../../../utils/logger";
@@ -42,12 +42,24 @@ const InterviewResults = () => {
   const [bookmarkError, setBookmarkError] = useState(null);
   const [bookmarkingQuestionId, setBookmarkingQuestionId] = useState(null);
   const [expandedCards, setExpandedCards] = useState({});
+  const [learningPlan, setLearningPlan] = useState(null);
+  const [loadingPlan, setLoadingPlan] = useState(false);
 
   useEffect(() => {
     const fetchResults = async () => {
       try {
         const res = await getResults(sessionId);
         setResults(res.data);
+        if (res.data?.weakConcepts?.length > 0) {
+          setLoadingPlan(true);
+          getLearningPlan(sessionId!).then(planRes => {
+            setLearningPlan(planRes.data?.plan || []);
+          }).catch(err => {
+            logger.error("[InterviewResults] Error fetching learning plan:", err);
+          }).finally(() => {
+            setLoadingPlan(false);
+          });
+        }
       } catch (err: any) {
         setError("Failed to load results.");
         logger.error("[InterviewResults] Error:", err);
@@ -113,9 +125,7 @@ const InterviewResults = () => {
   const handleExportPDF = async () => {
     try {
       const filename = `Interview_Report_${results?.topic?.replace(/[^a-z0-9]/gi, '_') || 'Session'}.pdf`;
-      await exportToPDF("mock-interview-pdf-target", filename, {
-        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#09090b' }
-      });
+      await generatePDFReport("mock-interview-pdf-target", filename);
     } catch (err: any) {
       logger.error("[InterviewResults] PDF export failed:", err);
     }
@@ -318,7 +328,7 @@ const InterviewResults = () => {
         </h3>
         <div className="flex flex-col gap-8 items-center">
           <div className="w-full max-w-[500px] h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
               <RadarChart cx="50%" cy="50%" outerRadius="75%" data={radarData}>
                 <PolarGrid stroke="rgba(255,255,255,0.1)" />
                 <PolarAngleAxis dataKey="subject" tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }} />
@@ -352,21 +362,49 @@ const InterviewResults = () => {
       )}
 
       {results.weakConcepts?.length > 0 && (
-        <div className="bg-amber-50 dark:bg-surface border border-amber-200 dark:border-amber-500/20 rounded-3xl p-8 dark:shadow-none animate-[fadeInUp_0.6s_ease-out]">
+        <div className="bg-amber-50 dark:bg-surface border border-amber-200 dark:border-amber-500/20 rounded-3xl p-8 mt-6 dark:shadow-none animate-[fadeInUp_0.6s_ease-out]">
           <h3 className="text-lg font-bold mb-4 text-text-main flex items-center gap-2">
             <AlertTriangle
               size={20}
               className="text-amber-500"
             />
-            Concepts to Review
+            Personalized Learning Plan
           </h3>
-          <div className="flex flex-wrap gap-2">
-            {results.weakConcepts.map((c, i) => (
-              <span key={i} className="py-1.5 px-3 rounded-full text-xs font-semibold bg-red-500/15 text-red-400">
-                {c}
-              </span>
-            ))}
-          </div>
+          
+          {loadingPlan ? (
+            <div className="flex flex-col items-center justify-center p-6 gap-3">
+              <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
+              <p className="text-sm text-text-muted font-medium">Generating personalized RAG learning plan...</p>
+            </div>
+          ) : learningPlan && learningPlan.length > 0 ? (
+            <div className="space-y-4">
+              {learningPlan.map((item: any, i: number) => (
+                <div key={i} className="bg-white dark:bg-slate-900 border border-amber-100 dark:border-amber-500/10 rounded-2xl p-5 shadow-sm">
+                  <h4 className="font-bold text-amber-600 dark:text-amber-400 text-base mb-2">{item.concept}</h4>
+                  <p className="text-sm text-text-muted leading-relaxed mb-4">{item.explanation}</p>
+                  
+                  {item.resources && item.resources.length > 0 && (
+                    <div>
+                      <span className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">Recommended Study:</span>
+                      <ul className="list-disc list-inside space-y-1">
+                        {item.resources.map((res: string, j: number) => (
+                          <li key={j} className="text-sm text-text-main">{res}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {results.weakConcepts.map((c: string, i: number) => (
+                <span key={i} className="py-1.5 px-3 rounded-full text-xs font-semibold bg-red-500/15 text-red-400">
+                  {c}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -438,6 +476,24 @@ const InterviewResults = () => {
                       ✗ {c}
                     </span>
                   ))}
+                </div>
+              )}
+              {a.weakConcepts && a.weakConcepts.length > 0 && (
+                <div className="mt-4">
+                  <span className="block text-xs font-bold text-text-muted mb-1.5">AI-Detected Weaknesses:</span>
+                  <div className="flex flex-wrap gap-2">
+                    {a.weakConcepts.map((wc, i) => (
+                      <span key={`wc-${i}`} className="py-1 px-2.5 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-400">
+                        ⚠ {wc}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {a.feedback && (
+                <div className="mt-4 p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/10 text-sm">
+                  <span className="font-bold text-indigo-400 block mb-1">AI Evaluation Feedback:</span>
+                  <p className="text-text-muted leading-relaxed">{a.feedback}</p>
                 </div>
               )}
             </div>
@@ -571,6 +627,24 @@ const InterviewResults = () => {
                       ✗ {c}
                     </span>
                   ))}
+                </div>
+              )}
+              {a.weakConcepts && a.weakConcepts.length > 0 && (
+                <div className="space-y-1">
+                  <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest">AI Weaknesses:</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {a.weakConcepts.map((wc, i) => (
+                      <span key={`pwc-${i}`} className="text-[9px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/10 px-2 py-0.5 rounded">
+                        ⚠ {wc}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {a.feedback && (
+                <div className="text-[11px] text-slate-300 leading-relaxed bg-slate-900/40 p-3 rounded border border-slate-800/40">
+                  <span className="block text-[9px] font-bold text-indigo-400 uppercase tracking-widest mb-1">AI Feedback:</span>
+                  {a.feedback}
                 </div>
               )}
             </div>

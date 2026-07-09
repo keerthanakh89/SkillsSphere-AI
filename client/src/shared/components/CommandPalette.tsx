@@ -10,7 +10,6 @@ const CommandPalette = () => {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef(null);
   const navigate = useNavigate();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { user } = useSelector((state: any) => state.auth);
   
   // Define actions based on roles
@@ -78,7 +77,6 @@ const CommandPalette = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, filteredActions, selectedIndex]);
 
   // Focus input when opened

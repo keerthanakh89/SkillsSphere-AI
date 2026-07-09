@@ -173,7 +173,7 @@ const StudentDashboard = ({ token }) => {
             </div>
             <div className="p-6 h-[280px] min-h-[280px] w-full">
               {skillTrends.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                   <BarChart
                     data={skillTrends}
                     layout="vertical"

@@ -1,10 +1,5 @@
 <a name="top"></a>
 ![----------------------------------------------------](https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png)
-
-![NSOC'26](https://img.shields.io/badge/NSOC-2026-orange?style=for-the-badge)
-
-**This project is officially registered under nexus spring of code 2026.**
-
 ![----------------------------------------------------](https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png)
 
 # SkillSphere AI
@@ -139,14 +134,15 @@ To simplify setup, you can now run the entire project using root-level scripts.
 ### Install all dependencies
 
 ```bash
-### Install all dependencies
+npm run quickstart
+```
 
 If the unified installer script encounters execution restriction errors on your system terminal, run the installation manually using directory prefixes:
 
 ```bash
 npm install
-npm install --prefix Backend
-npm install --prefix Frontend
+npm install --prefix server
+npm install --prefix client
 ```
 
 This installs:
@@ -191,7 +187,7 @@ To avoid manual installation of Python dependencies, Node modules, and OS-level 
 
 ### Steps
 1. Clone the repository and navigate to the root directory.
-2. Ensure you have created your local `.env` file from `.env.example`. Keep real secrets out of git.
+2. Ensure you have created your local `.env` files from `.env.example`. Keep real secrets out of git.
 3. Run the following command from the root directory:
 
    ```bash
@@ -203,7 +199,24 @@ Access the applications:
 - **Server**: [http://localhost:5000](http://localhost:5000)
 - **AI Microservice**: [http://localhost:8000](http://localhost:8000)
 
+### 4. Seed the Vector Database (RAG)
+
+Once the containers are running, you must ingest the learning materials into the local Qdrant database to enable the AI Mock Interview system:
+
+```bash
+# If using Docker
+docker-compose exec interview-ai-service python rag/ingestion.py
+
+# If running the Python service locally outside Docker
+cd interview-ai-service
+python rag/ingestion.py
+```
+
 To stop the containers, press `Ctrl+C` or run `docker-compose down`.
+
+## 🚀 Deployment (Vercel + Render)
+
+For production deployment instructions using our hybrid strategy (Frontend on Vercel, Backend and AI on Render), please see the [Deployment Guide](./DEPLOYMENT.md).
 
 ## Scalable Folder Structure
 

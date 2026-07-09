@@ -65,10 +65,10 @@ const Hero = () => {
           @media (prefers-reduced-motion: reduce) {
             .orb-float,
             .animate-heading-char,
-            .motion-safe\:animate-cockpit-glow,
-            .motion-safe\:animate-shimmer-sweep,
-            .motion-safe\:animate-scan-line,
-            .motion-safe\:animate-flow-across {
+            .motion-safe\\:animate-cockpit-glow,
+            .motion-safe\\:animate-shimmer-sweep,
+            .motion-safe\\:animate-scan-line,
+            .motion-safe\\:animate-flow-across {
               animation: none !important;
               transition: none !important;
             }

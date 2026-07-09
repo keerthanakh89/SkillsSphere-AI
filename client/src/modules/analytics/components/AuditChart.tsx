@@ -57,7 +57,7 @@ const AuditChart = ({ data, actions, type = "line" }) => {
 
   return (
     <div className="h-96 w-full">
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
         {type === "line" ? (
           <LineChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />

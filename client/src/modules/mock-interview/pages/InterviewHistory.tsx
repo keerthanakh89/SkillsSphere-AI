@@ -1,10 +1,7 @@
 
 import React, { useRef, useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { useDispatch, useSelector } from "react-redux";
-import { fetchInterviewHistory, clearInterviewsError } from "../../../features/interviews/interviewsSlice";
 import { getHistory } from "../services/interviewService";
-import Pagination from "../../../shared/components/Pagination";
 import { ErrorState } from "../../../shared/components";
 import {
   Plus,
@@ -411,28 +408,59 @@ const AnalyticsSummary = ({ analytics }) => {
 const InterviewHistory = () => {
   useDocumentTitle("Interview History");
   const navigate = useNavigate();
-  const dispatch = useDispatch<any>();
   
-  const { sessions, pagination, analytics: serverAnalytics, isLoading: loading, error } = useSelector((state: any) => state.interviews);
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [serverAnalytics, setServerAnalytics] = useState<any>(null);
+  const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
-  const [exportingType, setExportingType] = useState(null);
-  const [exportError, setExportError] = useState(null);
+  const [exportingType, setExportingType] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const exportInProgressRef = useRef(false);
 
   const analytics = calculateInterviewAnalytics(sessions, serverAnalytics);
 
-  const fetchHistory = (page = 1) => {
-    // @ts-expect-error TODO: Fix pervasive types
-    dispatch(fetchInterviewHistory({ page, limit: 10 }));
+  const fetchHistory = async (page = 1, append = false) => {
+    try {
+      if (!append) setLoading(true);
+      else setLoadingMore(true);
+      setError(null);
+      
+      const res = await getHistory(page, 10);
+      
+      if (append) {
+        setSessions(prev => {
+          // Prevent duplicates if backend returns overlapping items
+          const existingIds = new Set(prev.map(s => s._id));
+          const newSessions = (res.data || []).filter(s => !existingIds.has(s._id));
+          return [...prev, ...newSessions];
+        });
+      } else {
+        setSessions(res.data || []);
+      }
+      
+      if (res.analytics) setServerAnalytics(res.analytics);
+      
+      setPagination({
+        page: res.currentPage || page,
+        pages: res.totalPages || 1,
+        total: res.totalDocuments || 0,
+      });
+      
+    } catch (err: any) {
+      setError(err.message || "Failed to load history");
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
   };
 
   useEffect(() => {
-    fetchHistory();
-    return () => {
-      dispatch(clearInterviewsError());
-    };
-  }, [dispatch]);
+    fetchHistory(1, false);
+  }, []);
 
   const formatDate = (dateStr) => {
     return new Date(dateStr).toLocaleDateString("en-US", {
@@ -447,7 +475,7 @@ const InterviewHistory = () => {
   const getExportSessions = async () => {
     if (pagination.total > sessions.length) {
       const res = await getHistory(1, pagination.total);
-      return res.data?.sessions || sessions;
+      return res.data || sessions;
     }
 
     return sessions;
@@ -595,8 +623,7 @@ const InterviewHistory = () => {
             title="Unable to load history"
             description={error}
             onRetry={() => {
-              dispatch(clearInterviewsError());
-              fetchHistory();
+              fetchHistory(1, false);
             }}
           />
         </div>
@@ -763,12 +790,24 @@ const InterviewHistory = () => {
         </div>
         )}
 
-          {pagination.pages > 1 && !filtersActive && (
-            <Pagination
-              currentPage={pagination.page}
-              totalPages={pagination.pages}
-              onPageChange={(p) => fetchHistory(p)}
-            />
+          {pagination.pages > pagination.page && !filtersActive && (
+            <div className="flex justify-center mt-6">
+              <button
+                type="button"
+                onClick={() => fetchHistory(pagination.page + 1, true)}
+                disabled={loadingMore}
+                className="bg-white dark:bg-surface text-indigo-600 dark:text-indigo-400 border border-border py-2 px-6 rounded-full font-semibold text-sm cursor-pointer flex items-center gap-2 hover:border-indigo-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+              >
+                {loadingMore ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  "Load More"
+                )}
+              </button>
+            </div>
           )}
         </>
       )}
