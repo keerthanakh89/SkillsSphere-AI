@@ -136,17 +136,29 @@ export const updateJob = async (id, updateData, recruiterId) => {
     throw new AppError("You do not have permission to update this job", 403);
   }
 
-  // Prevent Mass Assignment: Remove protected fields
-  delete updateData.recruiter;
-  delete updateData._id;
-  delete updateData.createdAt;
-  delete updateData.updatedAt;
-  delete updateData.__v;
+  // Prevent Mass Assignment and NoSQL Injection: Allowlist explicitly permitted fields
+  const allowedFields = [
+    "title", "description", "requirements", "responsibilities", 
+    "skills", "experienceRequired", "jobLevel", "status", 
+    "location", "salary", "keywords"
+  ];
+  
+  const safeUpdate = {};
+  for (const field of allowedFields) {
+    if (updateData[field] !== undefined) {
+      safeUpdate[field] = updateData[field];
+    }
+  }
 
-  const updatedJob = await JobPosting.findByIdAndUpdate(id, updateData, {
-    new: true,
-    runValidators: true,
-  });
+  // Use a deterministic $set object so any attacker-supplied operators (e.g. $set, $push) are neutralized
+  const updatedJob = await JobPosting.findByIdAndUpdate(
+    id, 
+    { $set: safeUpdate }, 
+    {
+      new: true,
+      runValidators: true,
+    }
+  );
 
   return updatedJob;
 };

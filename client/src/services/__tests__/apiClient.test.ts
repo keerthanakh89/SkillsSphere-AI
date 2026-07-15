@@ -34,16 +34,16 @@ describe("normalizeApiError", () => {
     });
   });
 
-  it("extracts field errors from common detail and error schemas", () => {
+  it("extracts field errors from the standardized schema", () => {
     const error = {
       status: 400,
       response: {
         data: {
-          details: {
+          errors: {
             title: "Title is required",
             skills: "At least one skill is required",
           },
-          detail: "Validation failed",
+          message: "Validation failed",
         },
       },
     };
@@ -58,53 +58,4 @@ describe("normalizeApiError", () => {
     });
   });
 
-  it("maps FastAPI validation arrays into field errors", () => {
-    const error = {
-      status: 422,
-      response: {
-        data: {
-          detail: [
-            {
-              loc: ["body", "title"],
-              msg: "Field required",
-            },
-            {
-              loc: ["body", "skills"],
-              msg: "At least one skill is required",
-            },
-          ],
-        },
-      },
-    };
-
-    expect(normalizeApiError(error)).toMatchObject({
-      status: 422,
-      message: "Field required",
-      errors: {
-        title: "Field required",
-        skills: "At least one skill is required",
-      },
-    });
-  });
-
-  it("falls back to nested error objects when the top-level payload uses error", () => {
-    const error = {
-      status: 400,
-      response: {
-        data: {
-          error: {
-            email: "Email is already in use",
-          },
-        },
-      },
-    };
-
-    expect(normalizeApiError(error)).toMatchObject({
-      status: 400,
-      message: "Something went wrong",
-      errors: {
-        email: "Email is already in use",
-      },
-    });
-  });
 });

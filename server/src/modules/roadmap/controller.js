@@ -336,7 +336,7 @@ export const assignTutorResource = asyncHandler(async (req, res) => {
         type: "system",
         metadata: { roadmapId: progress._id.toString(), milestoneId: topicId }
       });
-      io.to(`user_${studentId}`).emit("new-notification", notif);
+      if (notif) io.to(`user_${studentId}`).emit("new-notification", notif);
     }
   } catch (error) {
     logger.error("Failed to process resource assignment notification/log:", error);
@@ -439,7 +439,7 @@ export const verifyTopic = asyncHandler(async (req, res) => {
         type: "system",
         metadata: { roadmapId: progress._id.toString(), milestoneId: topicId }
       });
-      io.to(`user_${studentId}`).emit("new-notification", notif);
+      if (notif) io.to(`user_${studentId}`).emit("new-notification", notif);
     }
   } catch (error) {
     logger.error("Failed to process milestone verification notification/log:", error);
@@ -517,7 +517,7 @@ export const addTutorMilestone = asyncHandler(async (req, res) => {
           type: "system",
           metadata: { roadmapId: progress._id.toString(), milestoneId: newTopic._id.toString() }
         });
-        io.to(`user_${studentId}`).emit("new-notification", notif);
+        if (notif) io.to(`user_${studentId}`).emit("new-notification", notif);
       }
     }
   } catch (error) {
@@ -704,7 +704,7 @@ export const postRoadmapComment = asyncHandler(async (req, res) => {
           type: "message",
           metadata: { roadmapId, milestoneId }
         });
-        if (io) {
+        if (io && notif) {
           io.to(`user_${tutorId}`).emit("new-notification", notif);
         }
       }
@@ -716,7 +716,7 @@ export const postRoadmapComment = asyncHandler(async (req, res) => {
         type: "message",
         metadata: { roadmapId, milestoneId }
       });
-      if (io) {
+      if (io && notif) {
         io.to(`user_${progress.user._id}`).emit("new-notification", notif);
       }
     }

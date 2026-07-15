@@ -83,6 +83,7 @@ describe("Job Controller", () => {
   describe("exportApplicationsToCSV", () => {
     it("should export applications as CSV and set correct headers", async () => {
       req.params.id = "507f1f77bcf86cd799439011";
+      req.query.status = "hired";
       
       const mockJob = {
         _id: "507f1f77bcf86cd799439011",
@@ -94,7 +95,7 @@ describe("Job Controller", () => {
           applicant: { name: "Alice", email: "alice@example.com" },
           aiMatchScore: 90,
           matchCategory: "Excellent Match",
-          status: "shortlisted",
+          status: "hired",
           createdAt: new Date("2026-05-24T00:00:00.000Z"),
           resumeLink: "https://example.com/alice.pdf",
           coverNote: "Hi there!",
@@ -146,6 +147,7 @@ describe("Job Controller", () => {
       assert.ok(lines[1].includes('"alice@example.com"'));
       assert.ok(lines[1].includes('"90%"'));
       assert.ok(lines[1].includes('"Excellent Match"'));
+      assert.ok(lines[1].includes('"hired"'));
     });
 
     it("should throw 403 error if recruiter is not owner of the job", async () => {

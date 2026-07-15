@@ -2,182 +2,127 @@
 
 ## 1. Executive Summary & Domain Scope
 
-The **Identity & Authentication** module is the security perimeter for the entire SkillsSphere-AI platform. It is responsible for establishing trusted sessions, enforcing strict Role-Based Access Control (RBAC), mitigating brute-force and credential-stuffing attacks, and handling federated OAuth 2.0 flows.
+The **Identity & Authentication** module is the security perimeter for the SkillsSphere-AI platform. It establishes authenticated user sessions with JWTs, enforces Role-Based Access Control (RBAC), supports email verification and password reset OTP flows, and integrates Google OAuth.
 
 ### Core Problem Addressed
-Modern web applications require robust security that goes beyond simple username/password checks. The platform serves three distinct user personas (Student, Tutor, Recruiter), each with wildly different data access patterns. A recruiter must never be able to mutate a student's resume, and a student must never be able to view hidden cohort analytics. This module centralizes these security boundaries into a single, highly audited gateway layer.
+
+SkillsSphere-AI serves multiple user personas, including students, tutors, recruiters, and administrators. Each role has different access boundaries, so authentication and authorization are centralized through backend middleware and frontend auth state management.
 
 ### Target User Personas
-- **All Users**: Require a frictionless login experience (via Email OTP or Google/GitHub OAuth) without compromising account security.
-- **System Administrators**: Require cryptographically verifiable audit trails of authentication attempts to detect malicious actors.
+
+- **All Users**: Need registration, login, email verification, logout, and protected route access.
+- **Students, Tutors, Recruiters, and Admins**: Need role-aware access to protected platform features.
+- **System Administrators**: Need consistent authentication controls and auditable login/logout behavior.
 
 ### High-Level Capability Matrix
-**What the Module Does:**
-- **Federated Login**: Supports Google and GitHub OAuth 2.0 with strict state parameter validation to prevent CSRF attacks.
-- **Passwordless OTP**: Implements a secure Time-Based One-Time Password (OTP) flow via email for users who do not wish to use federated login.
-- **JWT Session Management**: Issues short-lived Access Tokens (15m) and long-lived, rotating Refresh Tokens (7d) stored securely in `HttpOnly` cookies.
-- **Granular RBAC**: Enforces strict role boundaries via Express middlewares before any controller logic executes.
 
-**What the Module Deliberately Avoids:**
-- **Storing Passwords**: The system operates entirely passwordless. By relying on OAuth and Email OTP, the platform eliminates the risk of mass password hash exfiltration in the event of a database breach.
-- **LocalStorage JWTs**: The frontend never stores Access or Refresh tokens in `localStorage` or `sessionStorage`, completely immunizing the application against Cross-Site Scripting (XSS) token theft.
+**What the Module Does:**
+
+- **JWT Session Management**: The backend signs a JWT and returns it in API responses for registration, login, email verification, Google login, and OAuth code exchange.
+- **Client Token Persistence**: The React client stores the JWT and user payload in browser storage. When `rememberMe` is true, it uses `localStorage`; otherwise it uses `sessionStorage`.
+- **Bearer Token Authentication**: Protected API calls send the JWT in the `Authorization: Bearer <token>` header.
+- **Google OAuth**: Supports Google OAuth redirect flow using signed state and a one-time auth code exchange so the JWT is not exposed in the callback URL.
+- **Email Verification and Password Reset OTPs**: Stores hashed OTP values on the user document with expiration timestamps and attempt limits.
+- **Granular RBAC**: Enforces role boundaries through Express middleware before protected controller logic runs.
+
+**What the Module Does Not Currently Implement:**
+
+- **HttpOnly Cookie Token Storage**: Auth JWTs are not currently stored in `HttpOnly` cookies.
+- **Rotating Refresh Tokens**: The implementation issues a single JWT and does not implement a separate refresh-token rotation flow.
+- **Silent Refresh Endpoint Flow**: Clients reauthenticate after token expiration rather than using a refresh-token endpoint.
 
 ---
 
-## 2. Comprehensive Architecture & Sequence Diagrams
+## 2. Authentication Architecture
 
-The architecture separates the token issuing logic from the validation middlewares, ensuring that every microservice route can easily verify a user's identity without querying the database for every request.
+The current implementation separates token issuing, token persistence, and token validation:
 
-### End-to-End User Flow (OAuth 2.0 Flow)
+- `server/src/modules/auth/service.js` signs JWTs with `buildAuthToken`.
+- `server/src/modules/auth/controller.js` returns `{ success, token, user }` from auth endpoints that issue sessions.
+- `client/src/features/auth/authSlice.ts` stores the token and user in Redux state and persists them to browser storage.
+- `client/src/utils/authToken.ts` reads the token from `localStorage` first and then `sessionStorage`.
+- `server/src/middleware/authMiddleware.js` validates protected requests by reading the bearer token from the `Authorization` header.
+
+### Login and Token Storage Flow
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor User as User
     participant FE as React Client
-    participant BE as Node.js Gateway
-    participant IdP as Identity Provider (Google)
+    participant BE as Node.js API
     participant DB as MongoDB
 
-    User->>FE: Clicks "Continue with Google"
-    FE->>BE: GET /api/auth/google/url?action=signup&role=student
-
-    Note over BE: Generate CSRF State Token with Payload
-    BE->>BE: Encode and encrypt { action: 'signup', role: 'student', csrfToken } into 'state'
-    BE->>BE: Set 'oauth_state' HttpOnly Cookie with raw csrfToken
-    BE-->>FE: Return Google Auth URL
-
-    FE->>IdP: Redirect User to Google
-    User->>IdP: Grants Permission
-    IdP->>BE: Redirect to /api/auth/google/callback?code=XYZ&state=ENCRYPTED_PAYLOAD
-
-    Note over BE: Strict State Validation & Decryption
-    BE->>BE: Decrypt 'state' parameter -> verifyAndDecodeOAuthState(state)
-    BE->>BE: Compare decrypted payload CSRF against req.cookies.oauth_state
-
-    BE->>IdP: Exchange 'code' for Access Token
-    IdP-->>BE: Returns IdP Access Token
-    BE->>IdP: Fetch User Profile (Email, Name, Avatar)
-
-    BE->>DB: Upsert User by Email (assigning requested role if signup)
-    Note over BE: Token Generation
-    BE->>BE: Sign short-lived Access Token (JWT)
-    BE->>BE: Sign long-lived Refresh Token (JWT)
-
-    BE->>BE: Set 'accessToken' & 'refreshToken' HttpOnly Cookies
-    BE-->>FE: Redirect to /dashboard with frontend callback URI
+    User->>FE: Submit login credentials
+    FE->>BE: POST /api/auth/login
+    BE->>DB: Find user and verify password
+    BE->>BE: Sign JWT with buildAuthToken(user)
+    BE-->>FE: { success, message, token, user }
+    FE->>FE: Store user/token in Redux
+    FE->>FE: Persist token in localStorage or sessionStorage
+    FE->>BE: Protected request with Authorization: Bearer <token>
+    BE->>BE: Verify JWT and load current user
+    BE-->>FE: Protected resource response
 ```
 
-### Component Hierarchy & Service Boundaries
+### Google OAuth Redirect Flow
 
 ```mermaid
-graph TD
-    subgraph Frontend [React Client Layer]
-        LP[LoginPage.jsx] --> OF[OAuthFlow.jsx]
-        LP --> EF[EmailOtpFlow.jsx]
-        EF --> OI[OtpInput.jsx]
-        RP[ProtectedRoute.jsx] --> HD[HigherOrderComponents]
-    end
+sequenceDiagram
+    autonumber
+    actor User as User
+    participant FE as React Client
+    participant BE as Node.js API
+    participant Google as Google OAuth
 
-    subgraph Backend API [Node.js Server Layer]
-        AC[AuthController.js] --> AS[AuthService.js]
-        AC --> OM[OAuthManager.js]
-        AS --> TM[TokenManager.js]
-    end
-
-    subgraph Middlewares
-        RM[RateLimiter.js]
-        AM[AuthMiddleware.js]
-        RB[RoleMiddleware.js]
-    end
-
-    subgraph Infrastructure
-        DB[(MongoDB)]
-        Redis[(Redis Store for OTPs)]
-    end
-
-    OF -- "GET /auth/google" --> RM
-    RM --> AC
-    AC --> DB
+    User->>FE: Click Continue with Google
+    FE->>BE: GET /api/auth/google
+    BE->>BE: Build Google auth URL with signed state
+    BE-->>Google: Redirect user to Google
+    Google-->>BE: Callback with code and state
+    BE->>BE: Verify signed state
+    BE->>Google: Exchange code for Google access token
+    BE->>Google: Fetch Google user profile
+    BE->>BE: Find or create local user
+    BE->>BE: Generate one-time auth code
+    BE-->>FE: Redirect to frontend callback with code
+    FE->>BE: POST /api/auth/exchange-code
+    BE-->>FE: { success, token, user }
+    FE->>FE: Persist token and user
 ```
 
 ---
 
-## 3. Detailed Data Models & Schemas
+## 3. Token Behavior
 
-The authentication models are highly streamlined because the platform delegates primary authentication to external IdPs or Email verification.
+### JWT Issuing
 
-### MongoDB Schemas
+`buildAuthToken(user)` signs a JWT containing:
 
-**User Model (`src/database/models/User.js`)**
-The central identity document.
+- `userId`
+- `role`
+- `jti`, a random token identifier used for logout blacklisting
 
-```javascript
-const mongoose = require('mongoose');
+The JWT is signed with `process.env.JWT_SECRET`. The expiration is configured by `process.env.JWT_EXPIRES_IN`; when that environment variable is not set, the default is `7d`.
 
-const userSchema = new mongoose.Schema({
-  email: {
-    type: String,
-    required: true,
-    unique: true,
-    lowercase: true,
-    trim: true,
-    index: true
-  },
-  name: {
-    type: String,
-    required: true
-  },
-  avatarUrl: {
-    type: String
-  },
-  role: {
-    type: String,
-    enum: ['student', 'tutor', 'recruiter', 'admin'],
-    default: 'student',
-    index: true
-  },
-  authProvider: {
-    type: String,
-    enum: ['google', 'github', 'email'],
-    required: true
-  },
-  providerId: {
-    type: String
-  }, // The unique ID from Google/GitHub
+### Client Persistence
 
-  // Refresh Token Rotation Tracking
-  refreshTokenVersion: {
-    type: Number,
-    default: 0
-  },
+The client persists auth state under these keys:
 
-  settings: {
-    isDiscoverable: { type: Boolean, default: true },
-    theme: { type: String, enum: ['light', 'dark', 'system'], default: 'dark' },
-    emailNotifications: { type: Boolean, default: true }
-  },
-  lastLoginAt: { type: Date }
-}, { timestamps: true });
+- `skillssphere.auth.token`
+- `skillssphere.auth.user`
+- `skillssphere.auth.pendingEmail`
 
-// Prevent duplicate provider IDs
-userSchema.index({ providerId: 1, authProvider: 1 }, { unique: true, sparse: true });
+`persistAuth({ token, user }, rememberMe)` chooses the storage location:
 
-module.exports = mongoose.model('User', userSchema);
-```
+- `localStorage` when `rememberMe` is true.
+- `sessionStorage` when `rememberMe` is false.
 
-### Redis OTP Schema
-To prevent brute-forcing, OTPs are stored in Redis with an absolute hardware-level TTL, rather than in MongoDB.
+On startup, the client reads stored auth from `localStorage` first and then `sessionStorage`. If a valid stored token and user are found, Redux initializes as authenticated.
 
-```text
-Key: `otp:${email}`
-Value: bcrypt_hash("123456")
-TTL: 300 (5 minutes)
+### Logout and Revocation
 
-Key: `otp_attempts:${email}`
-Value: Integer (Count of failed attempts)
-TTL: 900 (15 minutes)
-```
+Logout sends the current JWT as a bearer token. The backend decodes the token and, when it contains `jti` and `exp`, adds that token identifier to the blacklist. The client clears local auth state and removes stored token/user values from both `localStorage` and `sessionStorage`.
 
 ---
 
@@ -185,159 +130,93 @@ TTL: 900 (15 minutes)
 
 ### REST Endpoints
 
-### Strict Zod Validation Middlewares
-All incoming requests are intercepted by `validateBody(schema)` which leverages strict Zod schemas (`auth.validation.js`). This automatically sanitizes inputs and strips unknown keys, mitigating NoSQL injection risks before the controller executes.
-
 | Method | Endpoint | Auth Level | Purpose | Payload | Response |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `POST` | `/api/auth/otp/send` | Public | Generates a 6-digit OTP and emails it via SendGrid. | `{ email: "user@example.com" }` (Zod validated) | `{ success: true, message: "OTP Sent" }` |
-| `POST` | `/api/auth/otp/verify` | Public | Validates the OTP. If valid, issues HttpOnly cookies. | `{ email: "user@example.com", otp: "123456" }` (Zod validated) | `{ user: {...} }` (Cookies attached via headers) |
-| `GET` | `/api/auth/google/url` | Public | Generates the secure OAuth redirect URL with encoded state. | `?action=signup&role=student` | `{ url: "https://accounts.google.com/..." }` |
-| `GET` | `/api/auth/google/callback` | Public | Consumes the OAuth code and encrypted state. | `?code=XYZ&state=ENCRYPTED` | Redirects to frontend with Cookies. |
-| `POST` | `/api/auth/refresh` | Public | Issues a new Access Token if the Refresh cookie is valid. | `None` | `{ success: true }` |
-| `POST` | `/api/auth/logout` | Auth | Clears all cookies and increments `refreshTokenVersion` in DB. | `None` | `{ success: true }` |
-| `GET` | `/api/auth/me` | Auth | Validates the current Access Token and returns the user payload. | `None` | `{ user: {...} }` |
+| `POST` | `/api/auth/register` | Public | Creates a local account and starts or skips email verification based on email service mode. | `{ name, email, password, role }` | `{ success, message, token, user }` |
+| `POST` | `/api/auth/login` | Public | Verifies local credentials and issues a JWT. | `{ email, password }` | `{ success, message, token, user }` |
+| `POST` | `/api/auth/verify-email` | Public | Validates the email verification OTP and issues a JWT. | `{ email, otp }` | `{ success, message, token, user }` |
+| `POST` | `/api/auth/resend-otp` | Public | Sends or queues a new verification OTP response without revealing account state. | `{ email }` | `{ success, message }` |
+| `POST` | `/api/auth/forgot-password` | Public | Starts password reset OTP flow. | `{ email }` | `{ success, message }` |
+| `POST` | `/api/auth/reset-password` | Public | Validates password reset OTP and updates the password. | `{ email, otp, newPassword }` | `{ success, message }` |
+| `GET` | `/api/auth/google` | Public | Starts Google OAuth redirect flow. | Query parameters such as `role` and `redirect` | Redirect to Google |
+| `GET` | `/api/auth/google/callback` | Public | Handles Google callback and redirects frontend with a one-time auth code. | `?code=...&state=...` | Redirect to frontend callback |
+| `POST` | `/api/auth/exchange-code` | Public | Exchanges the one-time OAuth auth code for the app JWT. | `{ code }` | `{ success, token, user }` |
+| `POST` | `/api/auth/google` | Public | Verifies a Google ID token and issues an app JWT. | `{ token }` | `{ success, message, token, user }` |
+| `GET` | `/api/auth/me` | Bearer token | Returns the current authenticated user. | None | `{ success, user }` |
+| `POST` | `/api/auth/logout` | Bearer token | Blacklists the current JWT when possible. | None | `{ success, message }` |
 
 ### Redux State Management
 
-The frontend uses Redux to store the verified user state globally, allowing protected routes to instantly block or allow access without making network calls for every page transition.
+The frontend stores the current auth session in Redux:
 
-```javascript
-// client/src/features/auth/authSlice.js
-import { createSlice } from '@reduxjs/toolkit';
-
+```typescript
 const initialState = {
-  isAuthenticated: false,
-  user: null, // { _id, email, name, role, avatarUrl }
-  loading: true, // Initially true while checking /api/auth/me
-  error: null
+  user: storedAuth.user,
+  token: storedAuth.token,
+  isAuthenticated: Boolean(storedAuth.token && storedAuth.user),
+  pendingVerificationEmail: readPendingEmail(),
+  pendingUser: null,
+  loading: false,
+  verificationLoading: false,
+  resendLoading: false,
+  error: null,
 };
-
-export const authSlice = createSlice({
-  name: 'auth',
-  initialState,
-  reducers: {
-    setCredentials: (state, action) => {
-      state.user = action.payload.user;
-      state.isAuthenticated = true;
-      state.loading = false;
-      state.error = null;
-    },
-    clearCredentials: (state) => {
-      state.user = null;
-      state.isAuthenticated = false;
-      state.loading = false;
-    },
-    setAuthLoading: (state, action) => {
-      state.loading = action.payload;
-    }
-  }
-});
 ```
+
+Successful login, registration auto-verification, email verification, and OAuth code exchange set the token and user in Redux. Logout and failed current-user fetches clear both Redux and browser storage.
 
 ---
 
 ## 5. Security, Edge Cases & Error Handling
 
-### XSS & CSRF Mitigation Strategy
-The platform employs a deeply defense-in-depth approach to token storage.
-- **XSS Immunity**: JavaScript running in the browser (even malicious third-party scripts) cannot read the `accessToken` or `refreshToken` because they are flagged as `HttpOnly: true`.
-- **CSRF Immunity**: Because the tokens are stored in cookies, the browser automatically attaches them to cross-origin requests. To prevent CSRF attacks, the backend uses the `cors` middleware configured explicitly to the frontend's origin with `credentials: true`. Furthermore, state-changing endpoints (`POST`, `PATCH`, `DELETE`) require a custom header (e.g., `X-Requested-With`) or rely on SameSite cookie policies (`SameSite=Strict`).
+### Browser Storage Tradeoffs
 
-### Refresh Token Rotation & Invalidation
-If a user's laptop is stolen, the attacker might extract the Refresh Token cookie.
-- **Handling**: When a user clicks "Logout All Devices" or changes their password/settings, the backend increments the `refreshTokenVersion` integer on their MongoDB User document.
-- **Validation**: When the `/api/auth/refresh` endpoint is hit, it decodes the JWT and compares the embedded `tokenVersion` against the DB's `refreshTokenVersion`. If they do not match, the token is instantly rejected, effectively killing all active sessions globally.
+The current implementation stores JWTs in `localStorage` or `sessionStorage`, not in `HttpOnly` cookies. This means browser JavaScript can read the token, which makes XSS prevention especially important. The benefit is that the browser does not automatically attach the token to every request the way it would with cookies, reducing the default CSRF exposure for token-authenticated API calls. A future cookie-based design would have different tradeoffs and would need explicit CSRF protections.
 
-### OTP Brute-Force Protection
-An attacker could try to brute-force a 6-digit OTP (only 1,000,000 combinations).
-- **Handling**: The `/api/auth/otp/verify` endpoint checks the Redis key `otp_attempts:${email}`. If the attempts exceed 5, the route immediately returns a `429 Too Many Requests` and locks the account for 15 minutes, rendering brute-force mathematically impossible within the 5-minute OTP lifespan.
+### Token Expiration
 
-### Open Redirect Prevention
-During OAuth flows, attackers often try to inject malicious redirect URIs.
-- **Handling**: The `OAuthManager` statically defines the allowed callback URIs in code. It strictly validates the incoming `redirect_uri` parameter against this whitelist. If it doesn't match precisely, the flow aborts immediately.
+JWT expiration is controlled by `JWT_EXPIRES_IN` on the server. If the variable is not configured, tokens expire after `7d`. When a token expires, protected middleware rejects it with an authentication error and the user must log in again.
+
+### Token Blacklisting on Logout
+
+JWTs include a `jti`. During logout, the backend attempts to blacklist that `jti` until the token's `exp` time. Protected routes reject blacklisted tokens.
+
+### Password Change Invalidation
+
+Protected route middleware compares the token issue time against `passwordChangedAt`. If the password was changed after the token was issued, the request is rejected and the user must log in again.
+
+### OTP Attempt Limits
+
+Email verification and password reset use hashed OTP values with expiration timestamps. The implementation tracks OTP attempts on the user document and rejects requests after the configured maximum attempt count.
+
+### OAuth State Protection
+
+Google OAuth state is signed with `OAUTH_STATE_SECRET`, includes a nonce and issued-at timestamp, and is rejected if the signature is invalid or the state is too old. Redirect paths are normalized and constrained to known frontend paths to reduce open redirect risk.
 
 ---
 
-## 6. Component-Level Implementation Specs
+## 6. Component-Level Implementation Notes
 
-### `ProtectedRoute.jsx` (The Gatekeeper)
-This Higher-Order Component wraps all restricted pages (e.g., `<Route path="/dashboard" element={<ProtectedRoute allowedRoles={['student']}><Dashboard /></ProtectedRoute>} />`).
-- **Logic**: It reads `isAuthenticated` and `role` from Redux.
-- If `loading` is true, it renders a full-screen spinner.
-- If `!isAuthenticated`, it forces a `<Navigate to="/login" replace />`.
-- If `role` is not in `allowedRoles`, it forces a `<Navigate to="/unauthorized" replace />`.
+### `client/src/features/auth/authSlice.ts`
 
-### `LoginPage.jsx` (The Entry Interface)
-Implements a sleek, split-pane layout with vibrant gradients.
-- **Google Auth Button**: Uses an absolute URL to hit the `/api/auth/google/url` endpoint.
-- **Email OTP Input**: Uses a controlled 6-box input component. As the user types, focus auto-advances to the next box.
+The auth slice owns session state, persistence, login/logout thunks, email verification state, and current-user fetch behavior. It writes auth data through `persistAuth` and clears both browser storage locations on logout.
 
-### `AuthMiddleware.js` (The Backend Shield)
-This Express middleware runs before every protected API route.
+### `client/src/utils/authToken.ts`
 
-```javascript
-// server/src/middleware/authMiddleware.js
-const jwt = require('jsonwebtoken');
+`getToken()` reads `skillssphere.auth.token` from `localStorage` first, then falls back to `sessionStorage`.
 
-const requireAuth = (req, res, next) => {
-  const token = req.cookies.accessToken;
+### `client/src/services/apiClient.ts`
 
-  if (!token) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
+When a token is provided to `apiRequest`, the client sends it as:
 
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded; // Attach user payload (id, role) to the request
-    next();
-  } catch (error) {
-    // If the Access Token is expired, the client should intercept the 401
-    // and fire a request to /api/auth/refresh
-    return res.status(401).json({ error: 'Token invalid or expired', code: 'TOKEN_EXPIRED' });
-  }
-};
-
-const requireRole = (roles) => (req, res, next) => {
-  if (!roles.includes(req.user.role)) {
-    return res.status(403).json({ error: 'Forbidden: Insufficient privileges' });
-  }
-  next();
-};
-
-module.exports = { requireAuth, requireRole };
+```http
+Authorization: Bearer <token>
 ```
 
-### `AxiosInterceptor.js` (Silent Token Renewal)
-The React client configures an Axios interceptor to handle token expiration seamlessly without bothering the user.
+### `server/src/modules/auth/service.js`
 
-```javascript
-// client/src/utils/axios.js
-api.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    const originalRequest = error.config;
+`buildAuthToken(user)` creates the JWT. Registration, login, Google login, and OAuth code exchange call this token builder and return the token through their controller responses.
 
-    // If we got a 401 TOKEN_EXPIRED and haven't retried yet
-    if (error.response?.data?.code === 'TOKEN_EXPIRED' && !originalRequest._retry) {
-      originalRequest._retry = true;
+### `server/src/middleware/authMiddleware.js`
 
-      try {
-        // Attempt to silently refresh the cookies
-        await axios.post('/api/auth/refresh', {}, { withCredentials: true });
-
-        // Retry the original failing request
-        return api(originalRequest);
-      } catch (refreshError) {
-        // The refresh token is also dead. Force a logout.
-        store.dispatch(clearCredentials());
-        window.location.href = '/login';
-        return Promise.reject(refreshError);
-      }
-    }
-    return Promise.reject(error);
-  }
-);
-```
-
-EOF
+The `protect` middleware reads the bearer token, verifies it with `JWT_SECRET`, checks token blacklist state, loads the current user, checks password-change invalidation, and attaches the user document to `req.user`.

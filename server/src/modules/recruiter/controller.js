@@ -451,7 +451,7 @@ export const inviteCandidate = asyncHandler(async (req, res, next) => {
 
   // Emit WebSocket event for real-time notification update
   const io = getIO();
-  if (io) {
+  if (io && notif) {
     io.to(`user_${candidateId}`).emit("new-notification", notif);
   }
 

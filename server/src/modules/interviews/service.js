@@ -13,6 +13,7 @@ import redisClient from "../../config/redis.js";
 import Notification from "../../database/models/Notification.js";
 import { getIO } from "../../utils/socketIO.js";
 import { safeDeletePhysicalFile } from "../../utils/fileUtils.js";
+import PDFDocument from "pdfkit";
 
 import logger from "../../utils/logger.js";
 
@@ -278,9 +279,7 @@ export const processAnswerSubmission = async ({
     const nextAudioPath = audioFile?.path || null;
 
     if (audioFile) {
-if (audioFile) {
-        session.answers[currentIndex].audioPath = nextAudioPath;
-      }
+      session.answers[currentIndex].audioPath = nextAudioPath;
     }
 
     // Move to next question
@@ -865,6 +864,294 @@ export const addTutorFeedback = async (sessionId, tutorId, { tutorOverallScore, 
 
     return session;
   }
+};
+
+/**
+ * Generate a PDF report buffer for a completed interview session.
+ * Checks Redis for a cached copy (TTL 10 minutes) before building.
+ * @param {string} sessionId - The interview session ID.
+ * @param {string} userId    - The requesting user's ID (ownership check).
+ * @returns {Promise<Buffer>} Raw PDF bytes ready to stream as an attachment.
+ */
+export const generateSessionPdf = async (sessionId, userId) => {
+  const CACHE_KEY = `pdf:interview:${sessionId}`;
+  const CACHE_TTL_SECONDS = 600; // 10 minutes
+
+  // --- Cache hit ---
+  if (redisClient?.isReady) {
+    try {
+      const cached = await redisClient.get(CACHE_KEY);
+      if (cached) {
+        return Buffer.from(cached, "base64");
+      }
+    } catch {
+      // Redis unavailable — fall through to generate fresh
+    }
+  }
+
+  // --- Ownership check ---
+  const session = await InterviewSession.findOne({
+    _id: sessionId,
+    userId,
+  }).lean();
+
+  if (!session) {
+    throw new AppError("Interview session not found", 404);
+  }
+
+  // --- Build PDF ---
+  const pdfBuffer = await new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ margin: 50, size: "A4" });
+    const chunks = [];
+
+    doc.on("data", (chunk) => chunks.push(chunk));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+
+    const palette = {
+      brand: "#4f46e5",
+      accent: "#8b5cf6",
+      muted: "#64748b",
+      danger: "#ef4444",
+      success: "#10b981",
+      text: "#1e293b",
+    };
+
+    // Header
+    doc
+      .fontSize(22)
+      .fillColor(palette.brand)
+      .font("Helvetica-Bold")
+      .text("SkillsSphere AI", { align: "left" });
+
+    doc
+      .fontSize(9)
+      .fillColor(palette.muted)
+      .font("Helvetica")
+      .text("Mock Interview Performance Report", { align: "left" });
+
+    doc.moveDown(0.4);
+    doc
+      .fontSize(8)
+      .fillColor(palette.muted)
+      .text(`Generated: ${new Date().toLocaleString()}`, { align: "right" })
+      .text(`Session: #${String(session._id).slice(-8).toUpperCase()}`, { align: "right" });
+
+    doc.moveDown(0.5);
+    doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor(palette.brand).lineWidth(1).stroke();
+    doc.moveDown(0.8);
+
+    // Session Overview
+    doc.fontSize(12).fillColor(palette.text).font("Helvetica-Bold").text("Session Overview");
+    doc.moveDown(0.4);
+
+    const meta = [
+      ["Topic", (session.topic || "—").toUpperCase()],
+      ["Difficulty", session.difficulty || "—"],
+      ["Status", session.status || "—"],
+      ["Duration", session.duration ? `${session.duration} seconds` : "—"],
+      ["Questions", String(session.totalQuestions || (session.answers || []).length)],
+      ["Completed", session.completedAt ? new Date(session.completedAt).toLocaleString() : "—"],
+    ];
+
+    meta.forEach(([label, value]) => {
+      doc
+        .fontSize(10)
+        .fillColor(palette.muted)
+        .font("Helvetica-Bold")
+        .text(`${label}: `, { continued: true })
+        .font("Helvetica")
+        .fillColor(palette.text)
+        .text(value);
+    });
+
+    doc.moveDown(0.8);
+
+    // Overall Score
+    const overallScore = session.overallScore ?? "N/A";
+    doc
+      .fontSize(36)
+      .fillColor(palette.brand)
+      .font("Helvetica-Bold")
+      .text(`${overallScore}%`, { align: "center" });
+
+    doc
+      .fontSize(9)
+      .fillColor(palette.muted)
+      .font("Helvetica")
+      .text("OVERALL SCORE", { align: "center" });
+
+    doc.moveDown(0.8);
+
+    // Per-dimension averages
+    const answers = session.answers || [];
+    const avg = (key) =>
+      answers.length
+        ? Math.round(answers.reduce((s, a) => s + (a.scores?.[key] || 0), 0) / answers.length)
+        : 0;
+
+    const dims = [
+      ["Technical", avg("technical")],
+      ["Communication", avg("communication")],
+      ["Relevance", avg("relevance")],
+    ];
+
+    doc
+      .moveTo(50, doc.y)
+      .lineTo(545, doc.y)
+      .strokeColor("#e2e8f0")
+      .lineWidth(0.5)
+      .stroke();
+    doc.moveDown(0.5);
+
+    doc.fontSize(11).fillColor(palette.text).font("Helvetica-Bold").text("Score Breakdown");
+    doc.moveDown(0.4);
+
+    dims.forEach(([label, score]) => {
+      const color = score >= 75 ? palette.success : score >= 50 ? "#f59e0b" : palette.danger;
+      doc
+        .fontSize(10)
+        .fillColor(palette.muted)
+        .font("Helvetica-Bold")
+        .text(`${label}: `, { continued: true })
+        .fillColor(color)
+        .text(`${score}%`);
+    });
+
+    doc.moveDown(0.8);
+
+    // Weak Concepts
+    if (session.weakConcepts?.length) {
+      doc
+        .moveTo(50, doc.y)
+        .lineTo(545, doc.y)
+        .strokeColor("#e2e8f0")
+        .lineWidth(0.5)
+        .stroke();
+      doc.moveDown(0.5);
+
+      doc
+        .fontSize(11)
+        .fillColor(palette.text)
+        .font("Helvetica-Bold")
+        .text("Concepts to Review");
+      doc.moveDown(0.3);
+
+      session.weakConcepts.forEach((concept) => {
+        doc
+          .fontSize(10)
+          .fillColor(palette.danger)
+          .font("Helvetica")
+          .text(`• ${concept}`);
+      });
+
+      doc.moveDown(0.8);
+    }
+
+    // Detailed Breakdown
+    if (answers.length) {
+      doc
+        .moveTo(50, doc.y)
+        .lineTo(545, doc.y)
+        .strokeColor("#e2e8f0")
+        .lineWidth(0.5)
+        .stroke();
+      doc.moveDown(0.5);
+
+      doc
+        .fontSize(11)
+        .fillColor(palette.text)
+        .font("Helvetica-Bold")
+        .text("Detailed Question Breakdown");
+
+      answers.forEach((a, idx) => {
+        doc.moveDown(0.6);
+        doc
+          .fontSize(10)
+          .fillColor(palette.brand)
+          .font("Helvetica-Bold")
+          .text(`Q${idx + 1}. ${a.questionText || "—"}`);
+
+        doc.moveDown(0.2);
+
+        const techScore = a.scores?.technical ?? "—";
+        const commScore = a.scores?.communication ?? "—";
+        const relScore  = a.scores?.relevance ?? "—";
+        doc
+          .fontSize(9)
+          .fillColor(palette.muted)
+          .font("Helvetica")
+          .text(`Tech: ${techScore}%   Comm: ${commScore}%   Relevance: ${relScore}%`);
+
+        if (a.transcript) {
+          doc.moveDown(0.2);
+          doc
+            .fontSize(9)
+            .fillColor(palette.muted)
+            .font("Helvetica-Bold")
+            .text("Your Answer:");
+          doc
+            .fontSize(9)
+            .fillColor(palette.text)
+            .font("Helvetica")
+            .text(a.transcript, { indent: 10 });
+        }
+
+        if (a.feedback) {
+          doc.moveDown(0.2);
+          doc
+            .fontSize(9)
+            .fillColor(palette.accent)
+            .font("Helvetica-Bold")
+            .text("AI Feedback:");
+          doc
+            .fontSize(9)
+            .fillColor(palette.text)
+            .font("Helvetica")
+            .text(a.feedback, { indent: 10 });
+        }
+
+        if (a.audioPath) {
+          doc.moveDown(0.2);
+          doc
+            .fontSize(8)
+            .fillColor(palette.success)
+            .font("Helvetica")
+            .text("🎙 Audio response recorded");
+        }
+      });
+    }
+
+    doc.moveDown(1.5);
+    doc
+      .moveTo(50, doc.y)
+      .lineTo(545, doc.y)
+      .strokeColor(palette.brand)
+      .lineWidth(0.5)
+      .stroke();
+    doc.moveDown(0.4);
+    doc
+      .fontSize(8)
+      .fillColor(palette.muted)
+      .font("Helvetica")
+      .text(
+        `SkillsSphere AI © ${new Date().getFullYear()} — Career intelligence ecosystem`,
+        { align: "center" }
+      );
+
+    doc.end();
+  });
+
+  // --- Cache result ---
+  if (redisClient?.isReady) {
+    try {
+      await redisClient.setEx(CACHE_KEY, CACHE_TTL_SECONDS, pdfBuffer.toString("base64"));
+    } catch {
+      // silently fail
+    }
+  }
+
+  return pdfBuffer;
 };
 
 /**

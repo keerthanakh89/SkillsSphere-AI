@@ -27,7 +27,7 @@ import {
   startInterview,
   submitAnswer,
   submitTutorFeedback,
-  getLearningPlan,
+  exportSessionPdf,
 } from "./controller.js";
 
 const router = express.Router();
@@ -297,6 +297,31 @@ router.post(
   validateBody(submitTutorFeedbackSchema),
   submitTutorFeedback,
 );
+
+/**
+ * @openapi
+ * /api/interviews/sessions/{id}/export:
+ *   get:
+ *     summary: Export an interview session as a PDF report
+ *     tags: [Interviews]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: PDF file stream
+ *         content:
+ *           application/pdf:
+ *             schema:
+ *               type: string
+ *               format: binary
+ */
+router.get("/sessions/:id/export", aiActionLimiter, exportSessionPdf);
 
 /**
  * @openapi

@@ -1,6 +1,58 @@
 import Notification from "../../database/models/Notification.js";
 import AppError from "../../utils/AppError.js";
 import { getIO } from "../../utils/socketIO.js";
+import User from "../../database/models/User.js";
+import redisClient from "../../config/redis.js";
+
+const TYPE_TO_PREF = {
+  interview: "interviewReminders",
+  "job-update": "jobUpdates",
+  application: "jobUpdates",
+  new_application: "jobUpdates",
+  skill_gap_alert: "resumeAnalysis",
+  info: "systemAlerts",
+  warning: "systemAlerts",
+  success: "systemAlerts",
+  error: "systemAlerts",
+  system: "systemAlerts",
+  message: "systemAlerts",
+  application_status: "jobUpdates",
+};
+
+const PREFS_CACHE_TTL = 300; // 5 minutes
+
+const getCachedUserPreferences = async (userId) => {
+  const cacheKey = `notif_prefs:${userId}`;
+
+  if (redisClient?.isReady) {
+    try {
+      const cached = await redisClient.get(cacheKey);
+      if (cached) return JSON.parse(cached);
+    } catch {
+      // Redis unavailable — fall through to DB query
+    }
+  }
+
+  const user = await User.findById(userId)
+    .select("preferences.notifications preferences.emailFrequency")
+    .lean()
+    .exec();
+
+  if (!user) return null;
+
+  const prefs = user.preferences?.notifications || {};
+  prefs.emailFrequency = user.preferences?.emailFrequency || "weekly";
+
+  if (redisClient?.isReady) {
+    try {
+      await redisClient.setEx(cacheKey, PREFS_CACHE_TTL, JSON.stringify(prefs));
+    } catch {
+      // Best-effort caching
+    }
+  }
+
+  return prefs;
+};
 
 /**
  * Create a new notification
@@ -10,10 +62,22 @@ import { getIO } from "../../utils/socketIO.js";
  * @param {string} notificationData.message - Notification message
  * @param {string} notificationData.type - Notification type
  * @param {Object} [notificationData.metadata] - Optional metadata
- * @returns {Promise<Object>} - Created notification
+ * @param {boolean} [notificationData.force=false] - Bypass user preference filtering
+ * @returns {Promise<Object|null>} - Created notification or null if filtered
  */
 export const createNotification = async (notificationData) => {
-  const { userId, title, message, type, metadata } = notificationData;
+  const { userId, title, message, type, metadata, force = false } = notificationData;
+
+  if (!force) {
+    const prefs = await getCachedUserPreferences(userId);
+
+    if (prefs) {
+      if (!prefs.inAppNotifications) return null;
+
+      const prefKey = TYPE_TO_PREF[type];
+      if (prefKey && !prefs[prefKey]) return null;
+    }
+  }
 
   const notification = await Notification.create({
     userId,

@@ -14,6 +14,7 @@ import {
   deleteNotificationsBulk,
 } from "../controller.js";
 import Notification from "../../../database/models/Notification.js";
+import User from "../../../database/models/User.js";
 import AppError from "../../../utils/AppError.js";
 
 const flush = () => new Promise(r => setTimeout(r, 0));
@@ -34,6 +35,31 @@ describe("Notification Controller", () => {
     };
     next = mock.fn();
   });
+
+  const mockUserPrefs = (overrides = {}) => {
+    const defaultPrefs = {
+      _id: "targetUser",
+      preferences: {
+        notifications: {
+          emailNotifications: true,
+          inAppNotifications: true,
+          interviewReminders: true,
+          jobUpdates: true,
+          resumeAnalysis: true,
+          systemAlerts: true,
+          ...overrides,
+        },
+        emailFrequency: "weekly",
+      },
+    };
+    mock.method(User, "findById", () => ({
+      select: () => ({
+        lean: () => ({
+          exec: () => defaultPrefs,
+        }),
+      }),
+    }));
+  };
 
   afterEach(() => {
     mock.restoreAll();
@@ -171,6 +197,7 @@ describe("Notification Controller", () => {
     });
 
     it("should respond with 201 and created notification", async () => {
+      mockUserPrefs();
       const body = { ...validBody(), userId: req.user._id };
       req.body = body;
       const mockCreated = { _id: "n1", ...body };
@@ -187,6 +214,7 @@ describe("Notification Controller", () => {
     });
 
     it("should validate and accept system, message, and application_status types", async () => {
+      mockUserPrefs();
       for (const t of ["system", "message", "application_status"]) {
         req.body = { ...validBody(), userId: req.user._id, type: t };
         const mockCreated = { _id: "n1", ...req.body };
@@ -278,6 +306,7 @@ describe("Notification Controller", () => {
     });
 
     it("preserves safe internal actionUrl metadata when creating notifications", async () => {
+      mockUserPrefs();
       req.body = {
         ...validBody(),
         userId: req.user._id,
@@ -308,6 +337,7 @@ describe("Notification Controller", () => {
     });
 
     it("sanitizes malicious external actionUrl metadata before persistence", async () => {
+      mockUserPrefs();
       req.body = {
         ...validBody(),
         userId: req.user._id,
@@ -339,6 +369,7 @@ describe("Notification Controller", () => {
     });
 
     it("sanitizes encoded malicious actionUrl metadata before persistence", async () => {
+      mockUserPrefs();
       req.body = {
         ...validBody(),
         userId: req.user._id,

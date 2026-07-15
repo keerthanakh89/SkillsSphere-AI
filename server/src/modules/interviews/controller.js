@@ -11,6 +11,7 @@ import {
   addTutorFeedback,
   updateQuestionBookmark,
   getBookmarkedQuestions,
+  generateSessionPdf,
 } from "./service.js";
 import { getServiceStatus } from "../../integrations/aiInterviewService.js";
 import asyncHandler from "../../utils/asyncHandler.js";

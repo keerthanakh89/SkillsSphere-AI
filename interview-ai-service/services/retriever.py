@@ -80,22 +80,8 @@ def ingest_documents(topic: str, folder_path: str):
             return len(all_chunks)
 
 from services.reranker import rerank_results
+from rank_bm25 import BM25Okapi
 import math
-
-def calculate_bm25(query: str, document: str) -> float:
-    """
-    Very simplified BM25-like keyword scoring for Hybrid Search fallback.
-    """
-    query_terms = set(query.lower().split())
-    doc_terms = document.lower().split()
-    score = 0.0
-    for term in query_terms:
-        # Simple term frequency
-        tf = doc_terms.count(term)
-        if tf > 0:
-            # Simplified idf = 1 for mock
-            score += (tf * 1.5) / (tf + 1.2)
-    return score
 
 def retrieve_context(query: str, topic: str, top_k: int = 5):
     """
@@ -114,14 +100,19 @@ def retrieve_context(query: str, topic: str, top_k: int = 5):
         # Filter by topic
         filtered = [item for item in store if item["metadata"]["topic"] == topic]
         
-        # Calculate scores (Hybrid: Semantic Cosine + Keyword BM25)
+        # Robust Hybrid Search: Semantic Cosine + Keyword BM25Okapi
+        tokenized_corpus = [item["text"].lower().split() for item in filtered]
+        bm25 = BM25Okapi(tokenized_corpus) if tokenized_corpus else None
+        tokenized_query = query.lower().split()
+        bm25_scores = bm25.get_scores(tokenized_query) if bm25 else [0] * len(filtered)
+        
         results = []
-        for item in filtered:
+        for i, item in enumerate(filtered):
             semantic_score = get_cosine_similarity(query_vector, item["embedding"])
-            keyword_score = calculate_bm25(query, item["text"])
+            keyword_score = bm25_scores[i]
             
             # Combine scores for hybrid search (normalize loosely)
-            hybrid_score = (semantic_score * 0.7) + (min(keyword_score, 5.0) / 5.0 * 0.3)
+            hybrid_score = (semantic_score * 0.7) + (min(keyword_score, 10.0) / 10.0 * 0.3)
             
             results.append((hybrid_score, item["text"]))
             
@@ -153,11 +144,17 @@ def retrieve_context(query: str, topic: str, top_k: int = 5):
             # Local fallback hybrid search
             store = get_mock_store()
             filtered = [item for item in store if item["metadata"]["topic"] == topic]
+            
+            tokenized_corpus = [item["text"].lower().split() for item in filtered]
+            bm25 = BM25Okapi(tokenized_corpus) if tokenized_corpus else None
+            tokenized_query = query.lower().split()
+            bm25_scores = bm25.get_scores(tokenized_query) if bm25 else [0] * len(filtered)
+            
             results = []
-            for item in filtered:
+            for i, item in enumerate(filtered):
                 semantic_score = get_cosine_similarity(query_vector, item["embedding"])
-                keyword_score = calculate_bm25(query, item["text"])
-                hybrid_score = (semantic_score * 0.7) + (min(keyword_score, 5.0) / 5.0 * 0.3)
+                keyword_score = bm25_scores[i]
+                hybrid_score = (semantic_score * 0.7) + (min(keyword_score, 10.0) / 10.0 * 0.3)
                 results.append((hybrid_score, item["text"]))
             results.sort(key=lambda x: x[0], reverse=True)
             candidate_texts = [text for _, text in results[:candidate_k]]
@@ -169,3 +166,5 @@ def retrieve_context(query: str, topic: str, top_k: int = 5):
     logger.info(f"Reranking {len(candidate_texts)} candidates to find top {top_k}...")
     final_results = rerank_results(query, candidate_texts, top_k=top_k)
     return final_results
+
+# Phase 14 RAG Implementation fully configured

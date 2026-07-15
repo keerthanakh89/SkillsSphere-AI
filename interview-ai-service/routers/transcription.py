@@ -98,8 +98,10 @@ async def websocket_transcribe(websocket: WebSocket):
             if chunk is not None:
                 if len(chunk) > MAX_AUDIO_BYTES or len(audio_buffer) + len(chunk) > MAX_AUDIO_BYTES:
                     await websocket.send_json({
-                        "error": _audio_too_large_message(),
+                        "success": False,
+                        "message": _audio_too_large_message(),
                         "code": "AUDIO_TOO_LARGE",
+                        "errors": {}
                     })
                     await websocket.close(code=1009)
                     return
@@ -123,7 +125,11 @@ async def websocket_transcribe(websocket: WebSocket):
                         await websocket.send_json({"transcript": transcript})
                     except Exception as e:
                         print(f"WebSocket transcription failed: {type(e).__name__}")
-                        await websocket.send_json({"error": "Transcription failed. Please try again."})
+                        await websocket.send_json({
+                            "success": False,
+                            "message": "Transcription failed. Please try again.",
+                            "errors": {}
+                        })
                     finally:
                         if tmp_path and os.path.exists(tmp_path):
                             os.unlink(tmp_path)

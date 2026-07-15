@@ -17,131 +17,6 @@ const isPlainObject = (value) => {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 };
 
-const MAX_EXTRACT_DEPTH = 10;
-
-const extractApiMessage = (value, depth = 0) => {
-  if (depth >= MAX_EXTRACT_DEPTH) {
-    return null;
-  }
-
-  if (typeof value === "string") {
-    return value;
-  }
-
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const message = extractApiMessage(item, depth + 1);
-      if (message) {
-        return message;
-      }
-    }
-    return null;
-  }
-
-  if (!isPlainObject(value)) {
-    return null;
-  }
-
-  return (
-    extractApiMessage(value.message, depth + 1) ||
-    extractApiMessage(value.msg, depth + 1) ||
-    extractApiMessage(value.detail, depth + 1) ||
-    extractApiMessage(value.error, depth + 1) ||
-    extractApiMessage(value.details, depth + 1)
-  );
-};
-
-const getValidationFieldName = (location) => {
-  if (typeof location === "string") {
-    return location;
-  }
-
-  if (!Array.isArray(location)) {
-    return null;
-  }
-
-  const segments = location.filter(
-    (segment) =>
-      typeof segment === "string" && !["body", "query", "path", "header"].includes(segment),
-  );
-
-  return segments.length > 0 ? segments.join(".") : null;
-};
-
-const normalizeValidationErrors = (value) => {
-  if (!Array.isArray(value)) {
-    return {};
-  }
-
-  return value.reduce((accumulator, item) => {
-    if (!isPlainObject(item)) {
-      return accumulator;
-    }
-
-    const fieldName =
-      getValidationFieldName(item.loc) ||
-      getValidationFieldName(item.location) ||
-      getValidationFieldName(item.field) ||
-      getValidationFieldName(item.path) ||
-      getValidationFieldName(item.param);
-
-    const message =
-      extractApiMessage(item.msg) ||
-      extractApiMessage(item.message) ||
-      extractApiMessage(item.detail) ||
-      extractApiMessage(item.error);
-
-    if (fieldName && message) {
-      accumulator[fieldName] = message;
-    }
-
-    return accumulator;
-  }, {});
-};
-
-const isFieldErrorObject = (value) => {
-  if (!isPlainObject(value)) {
-    return false;
-  }
-
-  return Object.keys(value).some(
-    (key) => !["message", "detail", "details", "error", "errors", "status", "code"].includes(key),
-  );
-};
-
-const extractApiErrors = (value) => {
-  if (!isPlainObject(value)) {
-    if (Array.isArray(value)) {
-      return normalizeValidationErrors(value);
-    }
-
-    return {};
-  }
-
-  const candidates = [value.errors, value.details, value.error, value.detail];
-
-  for (const candidate of candidates) {
-    if (Array.isArray(candidate)) {
-      const normalizedErrors = normalizeValidationErrors(candidate);
-      if (Object.keys(normalizedErrors).length > 0) {
-        return normalizedErrors;
-      }
-    }
-
-    if (isFieldErrorObject(candidate)) {
-      return candidate;
-    }
-
-    if (isPlainObject(candidate)) {
-      const nestedErrors = extractApiErrors(candidate);
-      if (Object.keys(nestedErrors).length > 0) {
-        return nestedErrors;
-      }
-    }
-  }
-
-  return {};
-};
 
 export const apiRequest = async (path, options = {}) => {
   // @ts-expect-error TODO: Fix pervasive types
@@ -228,6 +103,10 @@ export const apiRequest = async (path, options = {}) => {
         typeof data === "object" &&
         typeof data.message === "string" &&
         data.message) ||
+      (data &&
+        typeof data === "object" &&
+        typeof data.detail === "string" &&
+        data.detail) ||
       response.statusText ||
       "Request failed";
 
@@ -240,8 +119,10 @@ export const apiRequest = async (path, options = {}) => {
     error.errors =
       (data &&
         typeof data === "object" &&
-        (data.errors || data.error || data.details)) ||
-      undefined;
+        typeof data.errors === "object" &&
+        !Array.isArray(data.errors) &&
+        data.errors) ||
+      {};
     // @ts-expect-error TODO: Fix pervasive types
     error.url = url;
     // @ts-expect-error TODO: Fix pervasive types
@@ -275,15 +156,24 @@ export const normalizeApiError = (error) => {
 
   const data = error.data ?? error.response?.data ?? null;
 
-  const message =
-    extractApiMessage(data) ||
-    (typeof error.message === "string" && error.message) ||
-    "Something went wrong";
+  let message = "Something went wrong";
+  let errors = {};
 
-  const errors =
-    extractApiErrors(data) ||
-    (isFieldErrorObject(error.errors) && error.errors) ||
-    {};
+  if (data && typeof data === "object") {
+    if (typeof data.message === "string" && data.message) {
+      message = data.message;
+    } else if (typeof data.detail === "string" && data.detail) {
+      message = data.detail;
+    } else if (typeof data.error === "string" && data.error) {
+      message = data.error;
+    }
+
+    if (data.errors && typeof data.errors === "object" && !Array.isArray(data.errors)) {
+      errors = data.errors;
+    }
+  } else if (typeof error.message === "string" && error.message) {
+    message = error.message;
+  }
 
   return {
     status,

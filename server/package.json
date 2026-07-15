@@ -34,6 +34,7 @@
     "nodemailer": "^8.0.5",
     "openai": "^4.104.0",
     "pdf-parse": "^2.4.5",
+    "pdfkit": "^0.19.1",
     "rate-limit-redis": "^5.0.0",
     "redis": "^5.12.1",
     "socket.io": "^4.8.3",
@@ -49,8 +50,8 @@
   },
   "devDependencies": {
     "dependency-cruiser": "^16.10.1",
-    "mongodb-memory-server": "^11.2.0",
     "eslint": "^8.57.1",
+    "mongodb-memory-server": "^11.2.0",
     "nodemon": "^3.1.14",
     "socket.io-client": "^4.8.3"
   }

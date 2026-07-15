@@ -276,8 +276,9 @@ const globalErrorHandler = (err, req, res, next) => {
     res.status(error.statusCode).json({
       success: false,
       status: error.status,
-      error: error,
+      statusCode: error.statusCode,
       message: error.message,
+      errors: error.errors || {},
       stack: error.stack,
     });
   } else {

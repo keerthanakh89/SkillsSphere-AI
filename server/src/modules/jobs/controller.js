@@ -322,7 +322,7 @@ export const exportApplicationsToCSV = asyncHandler(async (req, res) => {
   }
 
   // Validate status filter if provided
-  const allowedStatuses = ["pending", "reviewed", "shortlisted", "rejected", "withdrawn"];
+  const allowedStatuses = ["pending", "reviewed", "shortlisted", "rejected", "withdrawn", "hired"];
   if (status && !allowedStatuses.includes(status.trim().toLowerCase())) {
     throw new AppError(`Invalid status filter. Allowed values: ${allowedStatuses.join(", ")}`, 400);
   }

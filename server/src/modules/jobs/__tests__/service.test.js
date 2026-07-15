@@ -53,7 +53,7 @@ describe("Job Service", () => {
       assert.equal(JobPosting.findByIdAndUpdate.mock.calls.length, 1);
       assert.deepEqual(JobPosting.findByIdAndUpdate.mock.calls[0].arguments, [
         mockJobId,
-        mockUpdateData,
+        { $set: mockUpdateData },
         { new: true, runValidators: true }
       ]);
       assert.deepEqual(result, mockUpdatedJob);
